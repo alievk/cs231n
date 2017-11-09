@@ -603,6 +603,8 @@ def spatial_batchnorm_forward(x, gamma, beta, bn_param):
     - cache: Values needed for the backward pass
     """
     out, cache = None, None
+    eps = 1e-9
+    momentum = 0.9
 
     ###########################################################################
     # TODO: Implement the forward pass for spatial batch normalization.       #
@@ -611,7 +613,16 @@ def spatial_batchnorm_forward(x, gamma, beta, bn_param):
     # version of batch normalization defined above. Your implementation should#
     # be very short; ours is less than five lines.                            #
     ###########################################################################
-    pass
+    sample_mean = np.mean(x, axis=(0, 2, 3)).reshape(1, x.shape[1], 1, 1)
+    sample_var = np.var(x, axis=(0, 2, 3)).reshape(1, x.shape[1], 1, 1)
+    gamma = gamma.reshape(1, x.shape[1], 1, 1)
+    beta = beta.reshape(1, x.shape[1], 1, 1)
+    out = gamma * (x - sample_mean) / np.sqrt(sample_var + eps) + beta
+
+    #running_mean = momentum * running_mean + (1 - momentum) * sample_mean
+    #running_var = momentum * running_var + (1 - momentum) * sample_var
+
+    cache = x, gamma, beta, sample_mean, sample_var, eps
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -632,16 +643,41 @@ def spatial_batchnorm_backward(dout, cache):
     - dgamma: Gradient with respect to scale parameter, of shape (C,)
     - dbeta: Gradient with respect to shift parameter, of shape (C,)
     """
-    dx, dgamma, dbeta = None, None, None
+    x, gamma, beta, sample_mean, sample_var, eps = cache
+    N, C, H, W = x.shape
+    dx, dgamma, dbeta = np.zeros_like(x), np.zeros((C,), dtype=x.dtype), np.zeros((C,), dtype=x.dtype)
+    ###########################################################################
+    # TODO: Implement the backward pass for batch normalization. Store the    #
+    # results in the dx, dgamma, and dbeta variables.                         #
+    ###########################################################################
+    # FIXME dx is not correct, check derivatives
+    for c in range(C):
+        for i in range(N):
+            noti = np.arange(N) != i
+            num = x[:,c] - sample_mean[:,c]
+            denum = np.sqrt(sample_var[:,c] + eps)
 
-    ###########################################################################
-    # TODO: Implement the backward pass for spatial batch normalization.      #
-    #                                                                         #
-    # HINT: You can implement spatial batch normalization using the vanilla   #
-    # version of batch normalization defined above. Your implementation should#
-    # be very short; ours is less than five lines.                            #
-    ###########################################################################
-    pass
+            doutdx = np.zeros((N,H,W)) * 1.
+            dnum = np.zeros((N,H,W)) * 1.
+
+            dnum[noti] = -1./(N*H*W)
+            dnum[i] = 1. - 1./(N*H*W)
+            ddenum = (x[i,c] - sample_mean[:,c]) / np.sqrt(sample_var[:,c] + eps)
+            ddenum /= N*H*W
+
+            # print (gamma.shape)
+            # print (denum.shape)
+            # print (dnum.shape)
+            # print (num.shape)
+            # print (ddenum.shape)
+            doutdx = gamma[:,c] * (denum * dnum - num * ddenum) / denum**2
+            dx[i,c] = np.sum(dout[:, c] * doutdx)
+
+    x_norm = (x - sample_mean) / np.sqrt(sample_var + eps)
+    dgamma = np.sum(dout * x_norm, axis=(0,2,3))
+
+    dbeta = np.sum(dout, axis=(0,2,3))
+
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
